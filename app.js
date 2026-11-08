@@ -2,6 +2,12 @@
 
 const login = document.querySelector("#login");
 const logout = document.querySelector("#logout");
+const registration = document.querySelector("#register");
+const membership = document.querySelector("#membership");
+const boardChoice = document.querySelector("#board-choice");
+const inviteOwner = document.querySelector("#invite-owner");
+const inviteResult = document.querySelector("#invite-result");
+const inviteCode = document.querySelector("#invite-code");
 const board = document.querySelector("#board");
 const teamGuide = document.querySelector("#team-guide");
 const studioGuide = document.querySelector("#studio-guide");
@@ -14,6 +20,7 @@ const archiveSummary = document.querySelector("#archive-summary");
 const archiveList = document.querySelector("#archive-list");
 const cardSubmit = cardForm.querySelector('button[type="submit"]');
 let session;
+let currentBoard;
 let snapshot;
 let socket;
 let retry;
@@ -45,8 +52,12 @@ function action(label, name, handler, title) {
     return button;
 }
 
+function canEdit() {
+    return currentBoard?.role === "owner" || currentBoard?.role === "editor";
+}
+
 function path() {
-    return "/api/boards/" + encodeURIComponent(session.board);
+    return "/api/boards/" + encodeURIComponent(currentBoard.id);
 }
 
 function render() {
@@ -58,13 +69,15 @@ function render() {
         for (const column of lane.columns) {
             const target = element("section", undefined, "column");
             target.dataset.column = column.id;
-            target.append(element("h3", column.title),
-                action("कार्ड जोड़ें / Add card", "create", () => openCard(null, lane, column), column.title));
-            target.addEventListener("dragover", event => event.preventDefault());
+            target.append(element("h3", column.title));
+            if (canEdit()) {
+                target.append(action("कार्ड जोड़ें / Add card", "create", () => openCard(null, lane, column), column.title));
+                target.addEventListener("dragover", event => event.preventDefault());
+            }
             target.addEventListener("drop", event => {
                 event.preventDefault();
                 const id = Number(event.dataTransfer.getData("text/plain"));
-                if (!id) return;
+                if (!canEdit() || !id) return;
                 const remaining = column.tasks.filter(task => task.id !== id);
                 const before = Number(event.target.closest(".card")?.dataset.task);
                 if (before === id) return;
@@ -74,17 +87,19 @@ function render() {
             for (const task of column.tasks) {
                 const card = element("article", undefined, "card");
                 card.dataset.task = task.id;
-                card.draggable = true;
-                card.addEventListener("dragstart", event => event.dataTransfer.setData("text/plain", task.id));
-                const actions = element("div", undefined, "card-actions");
-                actions.append(
-                    action("स्थान बदलें / Move", "move", () => chooseMove(task, lane, column), task.title),
-                    action("संपादित करें / Edit", "edit", () => openCard(task, lane, column), task.title),
-                    action("संग्रहित करें / Archive", "archive", () => changeArchive(task, "archive"), task.title)
-                );
                 card.append(element("p", task.title));
                 if (task.description) card.append(element("p", task.description));
-                card.append(actions);
+                if (canEdit()) {
+                    card.draggable = true;
+                    card.addEventListener("dragstart", event => event.dataTransfer.setData("text/plain", task.id));
+                    const actions = element("div", undefined, "card-actions");
+                    actions.append(
+                        action("स्थान बदलें / Move", "move", () => chooseMove(task, lane, column), task.title),
+                        action("संपादित करें / Edit", "edit", () => openCard(task, lane, column), task.title),
+                        action("संग्रहित करें / Archive", "archive", () => changeArchive(task, "archive"), task.title)
+                    );
+                    card.append(actions);
+                }
                 target.append(card);
             }
             columns.append(target);
@@ -104,36 +119,41 @@ function render() {
         const source = snapshot.lanes.find(row => row.id === lane);
         const destination = source?.columns.find(target => target.id === column);
         if (destination) item.append(element("p", source.name + " · " + destination.title));
-        item.append(action("वापस लाएँ / Restore", "restore", () => changeArchive(card, "restore"), card.title));
+        if (canEdit()) item.append(action("वापस लाएँ / Restore", "restore", () => changeArchive(card, "restore"), card.title));
         return item;
     }));
     if (!snapshot.archived.length) archiveList.append(element("p", "संग्रह खाली है। / The archive is empty."));
 }
 
 async function refresh() {
-    const account = session;
+    const selected = currentBoard;
+    if (!selected) return;
     const next = await request(path());
-    if (session !== account || (snapshot && next.revision <= snapshot.revision)) return;
+    if (currentBoard !== selected || (snapshot && next.revision <= snapshot.revision)) return;
     snapshot = next;
     render();
 }
 
 function refreshInBackground() {
+    const selected = currentBoard;
     refresh().catch(error => {
+        if (currentBoard !== selected) return;
         if (error.status === 401 || error.status === 403) void start();
         else status.textContent = "कार्यपट फिर से पढ़ा जाएगा। / Retrying board refresh.";
     });
 }
 
 function connect() {
+    if (!currentBoard) return;
+    const selected = currentBoard.id;
     const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-    const current = new WebSocket(scheme + "//" + location.host + "/live/" + encodeURIComponent(session.board), "bhash.board.v1");
+    const current = new WebSocket(scheme + "//" + location.host + "/live/" + encodeURIComponent(selected), "bhash.board.v1");
     socket = current;
     current.onmessage = event => {
         if (socket !== current) return;
         const update = JSON.parse(event.data);
         if (update.type === "ready" ||
-            (update.type === "changed" && update.board === session.board && update.revision > (snapshot?.revision ?? -1))) {
+            (update.type === "changed" && update.board === selected && update.revision > (snapshot?.revision ?? -1))) {
             refreshInBackground();
         }
     };
@@ -159,18 +179,76 @@ function closeBoard() {
     archiveList.replaceChildren();
 }
 
-function showSession() {
+function selectBoard(id) {
     closeBoard();
-    login.hidden = Boolean(session.user);
-    board.hidden = !session.user;
-    teamGuide.hidden = !session.user || session.board !== "team";
-    studioGuide.hidden = !session.user || session.board !== "studio";
-    logout.hidden = !session.user;
-    if (session.user) {
+    currentBoard = session.boards.find(project => project.id === id);
+    boardChoice.value = currentBoard?.id ?? "";
+    board.hidden = !currentBoard;
+    teamGuide.hidden = currentBoard?.id !== "team" || !canEdit();
+    studioGuide.hidden = currentBoard?.id !== "studio";
+    inviteOwner.hidden = currentBoard?.role !== "owner";
+    inviteOwner.open = false;
+    inviteResult.hidden = true;
+    inviteCode.value = "";
+    if (currentBoard) {
         refreshInBackground();
         connect();
     }
 }
+
+function showSession(preferred) {
+    const signedIn = Boolean(session.user);
+    login.hidden = signedIn;
+    registration.hidden = signedIn;
+    membership.hidden = !signedIn;
+    logout.hidden = !signedIn;
+    boardChoice.replaceChildren(...session.boards.map(project =>
+        new Option(project.id + " · " + project.role, project.id)
+    ));
+    document.querySelector("#board-selector").hidden = !session.boards.length;
+    document.querySelector("#no-membership").hidden = Boolean(session.boards.length);
+    const selected = session.boards.some(project => project.id === preferred) ? preferred : session.board;
+    selectBoard(selected);
+}
+
+boardChoice.addEventListener("change", () => selectBoard(boardChoice.value));
+
+document.querySelector("#issue-invite").addEventListener("submit", async event => {
+    event.preventDefault();
+    const selected = currentBoard;
+    inviteResult.hidden = true;
+    inviteCode.value = "";
+    try {
+        const result = await request(path() + "/invitations", "POST", Object.fromEntries(new FormData(event.target)));
+        if (currentBoard !== selected) return;
+        inviteCode.value = result.code;
+        inviteResult.hidden = false;
+        inviteCode.select();
+    } catch {
+        if (currentBoard === selected) status.textContent = "निमंत्रण नहीं बन सका। / Could not invite that account.";
+    }
+});
+
+document.querySelector("#accept-invite").addEventListener("submit", async event => {
+    event.preventDefault();
+    const account = session;
+    const [boardId, token, extra] = event.target.elements.code.value.trim().split(".");
+    if (!boardId || !token || extra !== undefined) {
+        status.textContent = "पूरा निमंत्रण कोड दें। / Enter the full invitation code.";
+        return;
+    }
+    try {
+        await request("/api/invitations/accept", "POST", { board: boardId, token });
+        const updated = await request("/session");
+        if (session !== account) return;
+        session = updated;
+        event.target.reset();
+        showSession(boardId);
+        status.textContent = "निमंत्रण स्वीकार हुआ। / Invitation accepted.";
+    } catch {
+        if (session === account) status.textContent = "निमंत्रण स्वीकार नहीं हुआ। / Invitation could not be accepted.";
+    }
+});
 
 function chooseMove(task, lane, column) {
     closeCard();
@@ -264,13 +342,13 @@ cardForm.addEventListener("submit", async event => {
 document.querySelector("#cancel-card").addEventListener("click", closeCard);
 
 async function changeArchive(task, operation) {
-    const account = session;
+    const selected = currentBoard;
     try {
         await request(path() + "/tasks/" + task.id + "/" + operation, "POST", { revision: snapshot.revision });
-        if (session !== account) return;
+        if (currentBoard !== selected) return;
         status.textContent = operation === "archive" ? "कार्ड संग्रहित है। / Card archived." : "कार्ड लौट आया। / Card restored.";
     } catch (error) {
-        if (session !== account) return;
+        if (currentBoard !== selected) return;
         status.textContent = error.status === 409
             ? "कार्यपट बदल गया है। फिर से कोशिश करें। / Board changed. Try again."
             : "कार्ड बदला नहीं गया। / Card could not be changed.";
@@ -286,17 +364,28 @@ move.addEventListener("submit", event => {
 });
 document.querySelector("#cancel-move").addEventListener("click", () => { move.hidden = true; });
 
-login.addEventListener("submit", async event => {
-    event.preventDefault();
-    try {
-        session = await request("/login", "POST", Object.fromEntries(new FormData(login)));
-        login.reset();
-        status.textContent = "";
-        showSession();
-    } catch {
-        status.textContent = "प्रवेश नहीं मिला। / Sign-in failed.";
-    }
-});
+function accountForm(form, endpoint, failure) {
+    form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (!session) return;
+        const submit = form.querySelector("button");
+        submit.disabled = true;
+        try {
+            session = await request(endpoint, "POST", Object.fromEntries(new FormData(form)));
+            login.reset();
+            registration.reset();
+            status.textContent = "";
+            showSession();
+        } catch {
+            status.textContent = failure;
+        } finally {
+            submit.disabled = false;
+        }
+    });
+}
+
+accountForm(login, "/login", "प्रवेश नहीं मिला। / Sign-in failed.");
+accountForm(registration, "/register", "खाता नहीं बना। नाम और कूटशब्द जाँचें। / Registration failed. Check the username and password.");
 
 logout.addEventListener("click", async () => {
     try {

@@ -47,8 +47,25 @@ For .NET, use `--target clr -o out/clr` and run `dotnet out/clr/BhashProgram.dll
 
 `--local=true` is for loopback HTTP. For deployment behind a TLS reverse proxy,
 omit it and set `--origin=https://your-board.example`. Forward HTTP requests and
-WebSocket upgrades to the loopback Bhash server. The three environment-configured
-accounts and fixed project memberships are the demo's access model.
+WebSocket upgrades to the loopback Bhash server. On first startup the three environment-configured demo accounts are stored
+as password hashes. Alice owns `team`, Bob can edit it, and Charlie owns
+`studio`. Existing databases pick up this membership migration at startup.
+Registered accounts and memberships are kept in SQLite across restarts.
+
+## खाते और निमंत्रण / Accounts and invitations
+
+1. नया उपयोगकर्ता **खाता बनाएँ** चुनता है और अपना नाम मालिक को बताता है।
+2. कार्यपट का मालिक **सदस्य बुलाएँ** खोलकर पंजीकृत नाम और भूमिका चुनता है।
+   कोड सिर्फ़ आमंत्रित व्यक्ति को भेजें।
+3. नया सदस्य अपने खाते में **निमंत्रण स्वीकारें** खोलकर पूरा कोड डालता है।
+   कार्यपट अब उसकी सूची में दिखता है।
+
+A new account starts without any board memberships. A board owner invites an
+existing username as **Viewer** (read and receive live updates) or **Editor**
+(also create, edit, move, archive, and restore cards). Only owners can issue
+invitations. Codes expire after 24 hours, can be used once by the named account,
+and can be replaced by issuing a new code. The server stores a hash of each
+pending code. Owners share codes directly with the recipient.
 
 ## अपनी Kanboard परियोजना लाएँ / Import your own board
 
