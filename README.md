@@ -29,7 +29,7 @@ read -rsp 'Charlie password: ' BHASH_BOARD_CHARLIE_PASSWORD; echo
 export BHASH_BOARD_ALICE_PASSWORD BHASH_BOARD_BOB_PASSWORD BHASH_BOARD_CHARLIE_PASSWORD
 
 java -Dfile.encoding=UTF-8 -jar out/board.jar --local=true --port=8080 \
-  --db=out/demo.db --import=tests/get-board.json
+  --db=out/demo.db --import=demo/get-board.json
 ```
 
 हर खाते का अलग कूटशब्द रखें और कम से कम १२ अक्षर दें। एक सामान्य विंडो में
