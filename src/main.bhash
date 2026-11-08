@@ -74,7 +74,11 @@
                 मार्ग.समजोड़ो("POST","/login",प्रवेश);
                 मार्ग.समजोड़ो("POST","/logout",प्रवेश);
                 मार्ग.जोड़ो("GET","/api/boards/:board",पट);
+                मार्ग.जोड़ो("POST","/api/boards/:board/tasks",पट);
                 मार्ग.जोड़ो("PATCH","/api/boards/:board/tasks/:id",पट);
+                मार्ग.जोड़ो("PATCH","/api/boards/:board/tasks/:id/details",पट);
+                मार्ग.जोड़ो("POST","/api/boards/:board/tasks/:id/archive",पट);
+                मार्ग.जोड़ो("POST","/api/boards/:board/tasks/:id/restore",पट);
                 स्थिर उन्नयन: वेबसॉकेटमार्ग=नया वेबसॉकेटमार्ग();
                 उन्नयन.जोड़ो("/live/:board",म,"member","bhash.board.v1",नया पटसॉकेट(घटनाएँ));
                 लिखो("READY "+वेब.अंक(सर्वर.पोर्ट()));

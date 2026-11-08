@@ -5,7 +5,7 @@ Kanboard की एक परियोजना को भाष में च�
 कार्यपट पर काम कर सकते हैं। कार्ड खींचकर छोड़ें, या उसके **स्थान बदलें** बटन से
 गंतव्य और क्रम चुनें। दूसरे सत्र को बदलाव WebSocket से मिलता है।
 
-This first milestone ports the shared board workflow. The Bhash server handles
+The shared board supports importing, creating, editing, moving, archiving, and restoring cards. The Bhash server handles
 validation, authentication, project membership, storage and live events. The
 browser handles rendering and input. Import follows the
 [Kanboard getBoard API](https://docs.kanboard.org/v1/api/board_procedures/).
@@ -35,7 +35,10 @@ java -Dfile.encoding=UTF-8 -jar out/board.jar --local=true --port=8080 \
 हर खाते का अलग कूटशब्द रखें और कम से कम १२ अक्षर दें। एक सामान्य विंडो में
 `alice` और निजी विंडो में `bob` से [स्थानीय कार्यपट](http://127.0.0.1:8080)
 खोलें। कार्ड को दूसरी पंक्ति के स्तंभ में ले जाएँ। दोनों विंडो में उसका नया
-स्थान दिखेगा। `charlie` का अपना खाली कार्यपट है। सर्वर को उसी `--db` के साथ
+स्थान दिखेगा। **कार्ड जोड़ें** से नया काम बनाएँ और **संपादित करें** से उसका
+शीर्षक या विवरण बदलें। **संग्रहित करें** कार्ड को सक्रिय कार्यपट से हटाता है।
+नीचे **संग्रह** खोलकर **वापस लाएँ** दबाने से कार्ड अपने पुराने स्तंभ और
+उपलब्ध पुराने स्थान पर लौटता है। `charlie` का अपना खाली कार्यपट है। सर्वर को उसी `--db` के साथ
 दोबारा चलाएँ और इस बार `--import` हटाएँ। फिर प्रवेश करने पर पिछला क्रम दिखेगा।
 
 For native, build with `--target native -o out/board` and run `./out/board`
@@ -66,7 +69,9 @@ The app accepts numeric and string IDs, including swimlane ID 0. It preserves
 numeric positions and uses source order when positions are absent. It imports
 active cards returned by `getBoard` and retains their titles and descriptions.
 The demo accepts up to 16 swimlanes, 16 columns per swimlane and 250 cards total,
-with a 2 MiB export limit and a 384 KiB normalized board limit. Invalid imports
+with a 2 MiB export limit and a 384 KiB normalized board limit.
+The 250-card limit includes archived cards. Titles allow up to 400 UTF-8 bytes
+and descriptions up to 4,096 UTF-8 bytes. Invalid imports
 leave the board untouched. Use a fresh database to import a different project.
 
 ## बदलाव कैसे सहेजा जाता है / How a move is saved
@@ -80,7 +85,7 @@ leave the board untouched. Use a fresh database to import a different project.
    अधिकृत कार्यपट फिर पढ़ता है। WebSocket फिर जुड़ने पर भी पृष्ठ नया क्रम पढ़ता है।
 
 SQLite holds one versioned JSON snapshot per board for this milestone. The
-single-row update is atomic. It also sets a practical scale limit and keeps the
+active and archived cards share the same atomic update and board revision. It also sets a practical scale limit and keeps the
 demo small. Attachments, comments, users, historical cards, and live two-way
 Kanboard synchronization are outside the import scope.
 
@@ -94,7 +99,9 @@ python tests/smoke.py --browser -- java -Dfile.encoding=UTF-8 -jar out/board.jar
 
 The smoke test opens two browser contexts and checks that both receive the
 committed WebSocket update. It also checks card order, CSRF, project isolation,
-stale and concurrent moves, same-column reorder, and persistence after restart.
+stale and concurrent moves, same-column reorder, creation, edits and stale
+drafts, archiving, restoration, upgrade of existing databases, and persistence
+after restart.
 CI exercises the JVM, .NET and Linux native builds. The same test without
 `--browser` uses two direct WebSocket clients.
 

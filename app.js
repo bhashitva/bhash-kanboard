@@ -7,11 +7,18 @@ const teamGuide = document.querySelector("#team-guide");
 const studioGuide = document.querySelector("#studio-guide");
 const status = document.querySelector("#status");
 const move = document.querySelector("#move");
+const cardForm = document.querySelector("#card-form");
+const cardConflict = document.querySelector("#card-conflict");
+const archive = document.querySelector("#archive");
+const archiveSummary = document.querySelector("#archive-summary");
+const archiveList = document.querySelector("#archive-list");
+const cardSubmit = cardForm.querySelector('button[type="submit"]');
 let session;
 let snapshot;
 let socket;
 let retry;
 let selection;
+let draft;
 
 async function request(path, method = "GET", body) {
     const headers = { Accept: "application/json" };
@@ -29,6 +36,15 @@ function element(name, content, className) {
     return node;
 }
 
+function action(label, name, handler, title) {
+    const button = element("button", label);
+    button.type = "button";
+    button.dataset.action = name;
+    if (title) button.setAttribute("aria-label", label + " " + title);
+    button.addEventListener("click", handler);
+    return button;
+}
+
 function path() {
     return "/api/boards/" + encodeURIComponent(session.board);
 }
@@ -42,7 +58,8 @@ function render() {
         for (const column of lane.columns) {
             const target = element("section", undefined, "column");
             target.dataset.column = column.id;
-            target.append(element("h3", column.title));
+            target.append(element("h3", column.title),
+                action("कार्ड जोड़ें / Add card", "create", () => openCard(null, lane, column), column.title));
             target.addEventListener("dragover", event => event.preventDefault());
             target.addEventListener("drop", event => {
                 event.preventDefault();
@@ -59,13 +76,15 @@ function render() {
                 card.dataset.task = task.id;
                 card.draggable = true;
                 card.addEventListener("dragstart", event => event.dataTransfer.setData("text/plain", task.id));
-                const button = element("button", "स्थान बदलें / Move");
-                button.type = "button";
-                button.setAttribute("aria-label", "स्थान बदलें / Move " + task.title);
-                button.addEventListener("click", () => chooseMove(task, lane, column));
+                const actions = element("div", undefined, "card-actions");
+                actions.append(
+                    action("स्थान बदलें / Move", "move", () => chooseMove(task, lane, column), task.title),
+                    action("संपादित करें / Edit", "edit", () => openCard(task, lane, column), task.title),
+                    action("संग्रहित करें / Archive", "archive", () => changeArchive(task, "archive"), task.title)
+                );
                 card.append(element("p", task.title));
                 if (task.description) card.append(element("p", task.description));
-                card.append(button);
+                card.append(actions);
                 target.append(card);
             }
             columns.append(target);
@@ -75,6 +94,20 @@ function render() {
     board.replaceChildren(...lanes);
     if (!lanes.length) board.append(element("p", "कोई आयातित परियोजना नहीं है। / No imported project."));
     board.dataset.revision = snapshot.revision;
+    archive.hidden = !lanes.length;
+    archiveSummary.textContent = "संग्रह / Archive (" + snapshot.archived.length + ")";
+    archiveList.replaceChildren(...snapshot.archived.map(({ card, lane, column }) => {
+        const item = element("article", undefined, "card");
+        item.dataset.archivedTask = card.id;
+        item.append(element("p", card.title));
+        if (card.description) item.append(element("p", card.description));
+        const source = snapshot.lanes.find(row => row.id === lane);
+        const destination = source?.columns.find(target => target.id === column);
+        if (destination) item.append(element("p", source.name + " · " + destination.title));
+        item.append(action("वापस लाएँ / Restore", "restore", () => changeArchive(card, "restore"), card.title));
+        return item;
+    }));
+    if (!snapshot.archived.length) archiveList.append(element("p", "संग्रह खाली है। / The archive is empty."));
 }
 
 async function refresh() {
@@ -120,6 +153,10 @@ function closeBoard() {
     board.replaceChildren();
     delete board.dataset.revision;
     move.hidden = true;
+    closeCard();
+    archive.hidden = true;
+    archive.open = false;
+    archiveList.replaceChildren();
 }
 
 function showSession() {
@@ -136,6 +173,7 @@ function showSession() {
 }
 
 function chooseMove(task, lane, column) {
+    closeCard();
     selection = { id: task.id, revision: snapshot.revision, lanes: snapshot.lanes };
     document.querySelector("#move-title").textContent = task.title;
     const options = snapshot.lanes.flatMap(row => row.columns.map(target =>
@@ -166,6 +204,77 @@ async function saveMove(id, lane, column, position, revision) {
             : "स्थान सहेजा नहीं गया। / Move failed.";
     }
     move.hidden = true;
+    refreshInBackground();
+}
+
+function closeCard() {
+    draft = null;
+    cardForm.hidden = true;
+    cardConflict.hidden = true;
+    cardSubmit.disabled = false;
+    cardForm.reset();
+}
+
+function openCard(task, lane, column) {
+    closeCard();
+    move.hidden = true;
+    draft = { id: task?.id, lane: lane.id, column: column.id, revision: snapshot.revision };
+    document.querySelector("#card-form-title").textContent = task
+        ? "कार्ड संपादित करें / Edit card"
+        : "कार्ड जोड़ें / Add card · " + lane.name + " · " + column.title;
+    cardForm.elements.title.value = task?.title ?? "";
+    cardForm.elements.description.value = task?.description ?? "";
+    cardForm.hidden = false;
+    cardForm.elements.title.focus();
+}
+
+cardForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    const editing = draft;
+    if (!editing || cardSubmit.disabled) return;
+    cardSubmit.disabled = true;
+    const values = Object.fromEntries(new FormData(cardForm));
+    try {
+        if (editing.id === undefined) {
+            await request(path() + "/tasks", "POST", {
+                ...values, lane: editing.lane, column: editing.column, revision: editing.revision
+            });
+        } else {
+            await request(path() + "/tasks/" + editing.id + "/details", "PATCH", {
+                ...values, revision: editing.revision
+            });
+        }
+        if (draft !== editing) return;
+        closeCard();
+        status.textContent = "कार्ड सहेजा गया। / Card saved.";
+    } catch (error) {
+        if (draft !== editing) return;
+        if (error.status === 409) {
+            cardConflict.hidden = false;
+            status.textContent = "कार्यपट बदल गया है। / Board changed while you were editing.";
+        } else {
+            cardSubmit.disabled = false;
+            status.textContent = error.status === 422
+                ? "शीर्षक, विवरण और कार्यपट की सीमा जाँचें। / Check the title, description, and board limits."
+                : "कार्ड सहेजा नहीं गया। / Card could not be saved.";
+        }
+    }
+    refreshInBackground();
+});
+document.querySelector("#cancel-card").addEventListener("click", closeCard);
+
+async function changeArchive(task, operation) {
+    const account = session;
+    try {
+        await request(path() + "/tasks/" + task.id + "/" + operation, "POST", { revision: snapshot.revision });
+        if (session !== account) return;
+        status.textContent = operation === "archive" ? "कार्ड संग्रहित है। / Card archived." : "कार्ड लौट आया। / Card restored.";
+    } catch (error) {
+        if (session !== account) return;
+        status.textContent = error.status === 409
+            ? "कार्यपट बदल गया है। फिर से कोशिश करें। / Board changed. Try again."
+            : "कार्ड बदला नहीं गया। / Card could not be changed.";
+    }
     refreshInBackground();
 }
 
