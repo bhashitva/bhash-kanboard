@@ -109,10 +109,13 @@ def browser_move(base):
             page.on("websocket", lambda socket, inbox=frames[index]:
                     socket.on("framereceived", lambda payload: inbox.append(json.loads(payload))))
             page.goto(base)
+            expect(page.locator("#team-guide")).to_be_hidden()
             page.locator("input[name=username]").fill(user)
             page.locator("input[name=password]").fill(PASSWORDS[user])
             page.locator("#login button").click()
             expect(page.locator("#board")).to_have_attribute("data-revision", "1")
+            expect(page.get_by_role("heading", name="एक कार्ड का स्थान बदलें / Move a card")).to_be_visible()
+            expect(page.locator("#studio-guide")).to_be_hidden()
             expect(page.locator('[data-task="101"]')).to_contain_text("पहला कार्ड 🧪")
             expect(page.locator('[data-task="101"] img')).to_have_count(0)
             pages.append(page)
