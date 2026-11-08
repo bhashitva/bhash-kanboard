@@ -12,6 +12,10 @@ button { cursor: pointer; color: white; background: #17607b; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #bd5700; outline-offset: 2px; }
 [hidden] { display: none !important; }
 #status { min-height: 1.5em; margin: .6rem 0; }
+.guide { padding: .85rem 1rem; margin-bottom: 1rem; background: white; border-inline-start: .25rem solid #17607b; border-radius: .35rem; }
+.guide h2 { font-size: 1.15rem; }
+.guide ol { margin: 0; padding-inline-start: 1.4rem; }
+.guide li + li { margin-top: .35rem; }
 .lane { margin-bottom: 1rem; }
 .columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .65rem; }
 .column { background: #deebf0; border-radius: .55rem; padding: .65rem; min-height: 6rem; }

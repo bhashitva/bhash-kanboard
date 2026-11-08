@@ -3,6 +3,8 @@
 const login = document.querySelector("#login");
 const logout = document.querySelector("#logout");
 const board = document.querySelector("#board");
+const teamGuide = document.querySelector("#team-guide");
+const studioGuide = document.querySelector("#studio-guide");
 const status = document.querySelector("#status");
 const move = document.querySelector("#move");
 let session;
@@ -124,6 +126,8 @@ function showSession() {
     closeBoard();
     login.hidden = Boolean(session.user);
     board.hidden = !session.user;
+    teamGuide.hidden = !session.user || session.board !== "team";
+    studioGuide.hidden = !session.user || session.board !== "studio";
     logout.hidden = !session.user;
     if (session.user) {
         refreshInBackground();
