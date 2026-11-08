@@ -28,6 +28,13 @@
   <p id="status" role="status"></p>
   <section id="membership" aria-label="सदस्यता / Membership" hidden>
     <label id="board-selector">कार्यपट / Board <select id="board-choice"></select></label>
+    <details id="create-project">
+      <summary>नया कार्यपट / New board</summary>
+      <form id="create-board">
+        <label>कार्यपट का नाम / Board name <input name="name" maxlength="80" required></label>
+        <button>कार्यपट बनाएँ / Create board</button>
+      </form>
+    </details>
     <p id="no-membership" hidden>कार्यपट खोलने के लिए मालिक से निमंत्रण कोड लें। <span lang="en">Ask a board owner for an invitation code.</span></p>
     <details>
       <summary>निमंत्रण स्वीकारें / Accept an invitation</summary>
@@ -57,7 +64,7 @@
       <li>नया काम जोड़ने के लिए <strong>कार्ड जोड़ें / Add card</strong> दबाएँ। <span lang="en">Use Edit to update a card or Archive to put it away. Open the archive to restore it.</span></li>
       <li>किसी कार्ड पर <strong>स्थान बदलें / Move</strong> दबाएँ। <span lang="en">Choose Move on any card.</span></li>
       <li>गंतव्य और स्थान चुनें, फिर <strong>सहेजें / Save move</strong> दबाएँ। <span lang="en">Choose a destination and position, then save. Position 1 puts the card at the top.</span></li>
-      <li>बदलाव देखने के लिए दूसरे खाते से निजी विंडो में प्रवेश करें। <span lang="en">Sign in as the other demo user (alice or bob) in a private window to see moves appear live.</span></li>
+      <li>बदलाव देखने के लिए दूसरे खाते से निजी विंडो में प्रवेश करें। <span lang="en">Ask another member to open this board in a separate browser session to see moves appear live.</span></li>
     </ol>
   </section>
   <section id="studio-guide" class="guide" aria-labelledby="studio-guide-title" hidden>
@@ -65,6 +72,15 @@
     <p>इस अलग कार्यपट में अभी कोई आयातित परियोजना नहीं है।
       <span lang="en">This separate board has no imported project yet.</span></p>
   </section>
+  <h2 id="board-title" hidden></h2>
+  <details id="project-settings" hidden>
+    <summary>कार्यपट प्रबंधन / Board settings</summary>
+    <h3>पंक्तियाँ और स्तंभ / Swimlanes and columns</h3>
+    <p>पहले कार्डों को दूसरी जगह ले जाएँ। / Move active and archived cards before deleting their location.</p>
+    <div id="layout-settings"></div>
+    <h3>सदस्य / Members</h3>
+    <div id="member-settings"></div>
+  </details>
   <section id="board" aria-label="कार्यपट / Board" hidden></section>
   <form id="card-form" hidden>
     <h2 id="card-form-title"></h2>

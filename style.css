@@ -34,3 +34,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 #membership { padding: .65rem; margin-bottom: 1rem; background: white; border-radius: .35rem; }
 #membership summary { cursor: pointer; padding: .35rem 0; }
 #invite-code { width: min(100%, 46rem); }
+
+#board-title, #project-settings { margin: 1rem 0; }
+#project-settings { padding: .75rem; border-radius: .4rem; background: #e5eff4; }
+#project-settings > summary { cursor: pointer; font-weight: bold; }
+#project-settings h3 { margin-top: .75rem; }
+#layout-settings form, #member-settings form { margin: .35rem 0; }
+.layout-lane { padding: .5rem; margin: .5rem 0; border-inline-start: .2rem solid #7594a5; }
+button:disabled { opacity: .6; cursor: default; }

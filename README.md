@@ -67,6 +67,21 @@ invitations. Codes expire after 24 hours, can be used once by the named account,
 and can be replaced by issuing a new code. The server stores a hash of each
 pending code. Owners share codes directly with the recipient.
 
+## कार्यपट प्रबंधन / Board administration
+
+पंजीकृत उपयोगकर्ता **नया कार्यपट** चुनकर अपना कार्यपट बना सकते हैं। नए
+कार्यपट में एक पंक्ति और तीन स्तंभ होते हैं। **कार्यपट प्रबंधन** में मालिक
+नाम, पंक्तियाँ और उनके स्तंभ जोड़, बदल या क्रमबद्ध कर सकता है। किसी पंक्ति
+या स्तंभ को हटाने से पहले उसके सक्रिय कार्ड दूसरी जगह ले जाएँ। वहाँ से
+संग्रहित कार्ड पहले वापस लाएँ, फिर उनका स्थान बदलें।
+
+Owners can list active members and pending invitations, revoke invitations,
+remove members, and assign viewer, editor, or owner roles to active members.
+A board must retain at least one owner. To transfer ownership, promote another
+member before changing your own role. Removed members lose HTTP and live access.
+Each registered account can create up to 20 boards. Each board supports up to
+16 swimlanes and each swimlane up to 16 columns.
+
 ## अपनी Kanboard परियोजना लाएँ / Import your own board
 
 Save the JSON-RPC response for one project. For example, request project 42
