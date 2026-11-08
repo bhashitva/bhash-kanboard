@@ -1,0 +1,60 @@
+name: Board smoke tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  board:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [jvm, clr, native]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-dotnet@v5
+        if: matrix.target == 'clr'
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install playwright==1.58.0 websocket-client==1.9.0
+          python -m playwright install --with-deps chromium
+      - name: Install native toolchain
+        if: matrix.target == 'native'
+        run: sudo apt-get update && sudo apt-get install -y clang-18 llvm-18 build-essential binutils
+      - name: Download and verify the released compiler
+        run: |
+          mkdir -p out
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/bhashitva/bhash/releases/download/vscode-0.19.0/bhash-vscode-0.19.0.vsix -o out/bhash.vsix
+          echo 'd22c59742947386214820ce32536b2be19c1dde2d1232537cf6fa3dc6589a975  out/bhash.vsix' | sha256sum --check
+          unzip -p out/bhash.vsix extension/server/bhash-compiler.jar > out/compiler.jar
+      - name: Build and exercise the imported board
+        env:
+          TARGET: ${{ matrix.target }}
+          BHASH_NATIVE_TOOLCHAIN: system
+          BHASH_CLANG: clang-18
+          BHASH_GC_STRESS: ${{ matrix.target == 'native' && '1' || '0' }}
+        run: |
+          case "$TARGET" in
+            jvm) output=out/board.jar; command=(java -Dfile.encoding=UTF-8 -jar "$output") ;;
+            clr) output=out/clr; command=(dotnet "$output/BhashProgram.dll") ;;
+            native) output=out/board; command=("$output") ;;
+          esac
+          java -jar out/compiler.jar compile bhash.project --target "$TARGET" -o "$output"
+          python tests/smoke.py --browser -- "${command[@]}"

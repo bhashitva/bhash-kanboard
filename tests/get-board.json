@@ -1,0 +1,73 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    {
+      "id": "2",
+      "name": "सहायता",
+      "position": "2",
+      "columns": [
+        {
+          "id": "12",
+          "title": "पूर्ण",
+          "position": "2",
+          "project_id": "42",
+          "tasks": []
+        },
+        {
+          "id": "11",
+          "title": "शुरू करें",
+          "position": "1",
+          "project_id": "42",
+          "tasks": [
+            {
+              "id": "103",
+              "title": "अनुरोध पढ़ें",
+              "position": "1",
+              "swimlane_id": "2",
+              "column_id": "11"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 0,
+      "name": "विकास",
+      "position": "1",
+      "columns": [
+        {
+          "id": "12",
+          "title": "पूर्ण",
+          "position": "2",
+          "project_id": "42",
+          "tasks": []
+        },
+        {
+          "id": "11",
+          "title": "शुरू करें",
+          "position": "1",
+          "project_id": "42",
+          "tasks": [
+            {
+              "id": "102",
+              "title": "दूसरा कार्ड",
+              "position": "3",
+              "swimlane_id": "0",
+              "column_id": "11"
+            },
+            {
+              "id": 101,
+              "title": "पहला कार्ड 🧪",
+              "description": "<img src=x onerror=alert(1)>",
+              "position": "1",
+              "swimlane_id": "0",
+              "column_id": "11",
+              "project_id": "42"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
