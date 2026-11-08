@@ -9,6 +9,10 @@ const inviteOwner = document.querySelector("#invite-owner");
 const inviteResult = document.querySelector("#invite-result");
 const inviteCode = document.querySelector("#invite-code");
 const board = document.querySelector("#board");
+const boardTitle = document.querySelector("#board-title");
+const projectSettings = document.querySelector("#project-settings");
+const layoutSettings = document.querySelector("#layout-settings");
+const memberSettings = document.querySelector("#member-settings");
 const teamGuide = document.querySelector("#team-guide");
 const studioGuide = document.querySelector("#studio-guide");
 const status = document.querySelector("#status");
@@ -109,6 +113,10 @@ function render() {
     board.replaceChildren(...lanes);
     if (!lanes.length) board.append(element("p", "कोई आयातित परियोजना नहीं है। / No imported project."));
     board.dataset.revision = snapshot.revision;
+    boardTitle.textContent = snapshot.name;
+    studioGuide.hidden = currentBoard.id !== "studio" || lanes.length > 0;
+    if (boardChoice.selectedOptions.length) boardChoice.selectedOptions[0].textContent = snapshot.name + " · " + currentBoard.role;
+    if (!projectSettings.hidden) renderLayout();
     archive.hidden = !lanes.length;
     archiveSummary.textContent = "संग्रह / Archive (" + snapshot.archived.length + ")";
     archiveList.replaceChildren(...snapshot.archived.map(({ card, lane, column }) => {
@@ -138,7 +146,7 @@ function refreshInBackground() {
     const selected = currentBoard;
     refresh().catch(error => {
         if (currentBoard !== selected) return;
-        if (error.status === 401 || error.status === 403) void start();
+        if (error.status === 401 || error.status === 403) void start(selected?.id);
         else status.textContent = "कार्यपट फिर से पढ़ा जाएगा। / Retrying board refresh.";
     });
 }
@@ -157,8 +165,12 @@ function connect() {
             refreshInBackground();
         }
     };
-    current.onclose = () => {
+    current.onclose = event => {
         if (socket !== current) return;
+        if (event.code === 1008) {
+            void start(selected);
+            return;
+        }
         retry = setTimeout(connect, 1500);
     };
 }
@@ -184,7 +196,13 @@ function selectBoard(id) {
     currentBoard = session.boards.find(project => project.id === id);
     boardChoice.value = currentBoard?.id ?? "";
     board.hidden = !currentBoard;
-    teamGuide.hidden = currentBoard?.id !== "team" || !canEdit();
+    boardTitle.hidden = !currentBoard;
+    boardTitle.textContent = currentBoard?.name ?? "";
+    teamGuide.hidden = currentBoard?.id === "studio" || !canEdit();
+    projectSettings.hidden = currentBoard?.role !== "owner";
+    projectSettings.open = false;
+    layoutSettings.replaceChildren();
+    memberSettings.replaceChildren();
     studioGuide.hidden = currentBoard?.id !== "studio";
     inviteOwner.hidden = currentBoard?.role !== "owner";
     inviteOwner.open = false;
@@ -203,7 +221,7 @@ function showSession(preferred) {
     membership.hidden = !signedIn;
     logout.hidden = !signedIn;
     boardChoice.replaceChildren(...session.boards.map(project =>
-        new Option(project.id + " · " + project.role, project.id)
+        new Option(project.name + " · " + project.role, project.id)
     ));
     document.querySelector("#board-selector").hidden = !session.boards.length;
     document.querySelector("#no-membership").hidden = Boolean(session.boards.length);
@@ -224,6 +242,7 @@ document.querySelector("#issue-invite").addEventListener("submit", async event =
         inviteCode.value = result.code;
         inviteResult.hidden = false;
         inviteCode.select();
+        if (projectSettings.open) void renderMembers();
     } catch {
         if (currentBoard === selected) status.textContent = "निमंत्रण नहीं बन सका। / Could not invite that account.";
     }
@@ -250,6 +269,141 @@ document.querySelector("#accept-invite").addEventListener("submit", async event 
     }
 });
 
+document.querySelector("#create-board").addEventListener("submit", async event => {
+    event.preventDefault();
+    const account = session;
+    const form = event.target;
+    const submit = form.querySelector("button");
+    submit.disabled = true;
+    try {
+        const created = await request("/api/boards", "POST", Object.fromEntries(new FormData(form)));
+        if (session !== account) return;
+        form.reset();
+        document.querySelector("#create-project").open = false;
+        await start(created.id);
+    } catch {
+        if (session === account) status.textContent = "कार्यपट नहीं बना। / Could not create the board.";
+    } finally {
+        submit.disabled = false;
+    }
+});
+
+async function changeLayout(change, revision) {
+    const selected = currentBoard;
+    try {
+        await request(path() + "/settings", "POST", { ...change, revision });
+        if (currentBoard !== selected) return;
+        status.textContent = "कार्यपट सहेजा गया। / Board settings saved.";
+    } catch (error) {
+        if (currentBoard !== selected) return;
+        status.textContent = error.status === 409
+            ? "बदलाव अस्वीकार है। क्रम और कार्डों की जगह जाँचें। / Check for newer edits or cards in that location."
+            : "बदलाव नहीं सहेजा गया। / Could not save board settings.";
+    }
+    refreshInBackground();
+}
+
+function nameForm(label, current, change, revision) {
+    const form = element("form");
+    const field = element("label", label);
+    const input = element("input");
+    input.value = current;
+    input.maxLength = 80;
+    input.required = true;
+    field.append(input);
+    form.append(field, element("button", current ? "नाम सहेजें / Save name" : "जोड़ें / Add"));
+    form.addEventListener("submit", event => {
+        event.preventDefault();
+        void changeLayout({ ...change, name: input.value }, revision);
+    });
+    return form;
+}
+
+function layoutRow(kind, item, index, siblings, lane, revision) {
+    const keys = { kind, id: item.id, lane };
+    const name = item.name ?? item.title;
+    const label = kind === "lane" ? "पंक्ति / Swimlane" : "स्तंभ / Column";
+    const form = nameForm(label, name, { ...keys, action: "rename" }, revision);
+    const up = action("ऊपर / Earlier", "earlier", () => changeLayout({ ...keys, action: "move", position: index }, revision), name);
+    const down = action("नीचे / Later", "later", () => changeLayout({ ...keys, action: "move", position: index + 2 }, revision), name);
+    const remove = action("हटाएँ / Delete", "delete", () => changeLayout({ ...keys, action: "delete" }, revision), name);
+    up.disabled = index === 0;
+    down.disabled = index === siblings.length - 1;
+    remove.disabled = siblings.length <= 1;
+    form.append(up, down, remove);
+    return form;
+}
+
+function renderLayout() {
+    const { revision, lanes, name } = snapshot;
+    const title = nameForm("कार्यपट का नाम / Board name", name, { kind: "board", action: "rename" }, revision);
+    const addLane = nameForm("नई पंक्ति / New swimlane", "", { kind: "lane", action: "add" }, revision);
+    const groups = lanes.map((lane, index) => {
+        const group = element("section", undefined, "layout-lane");
+        group.append(element("h4", lane.name), layoutRow("lane", lane, index, lanes, lane.id, revision));
+        for (const [columnIndex, column] of lane.columns.entries()) {
+            group.append(layoutRow("column", column, columnIndex, lane.columns, lane.id, revision));
+        }
+        group.append(nameForm("नया स्तंभ / New column", "", { kind: "column", action: "add", lane: lane.id }, revision));
+        return group;
+    });
+    layoutSettings.replaceChildren(title, ...groups, addLane);
+}
+
+async function renderMembers() {
+    const selected = currentBoard;
+    if (selected?.role !== "owner") return;
+    try {
+        const members = await request(path() + "/members");
+        if (currentBoard !== selected) return;
+        memberSettings.replaceChildren(...members.map(member => {
+            const row = element("form");
+            row.append(element("p", member.username + (member.pending ? " · निमंत्रण / Invitation" : "")));
+            if (!member.pending) {
+                const field = element("label", "भूमिका / Role");
+                const roles = element("select");
+                roles.append(...["owner", "editor", "viewer"].map(role => new Option(role, role)));
+                roles.value = member.role;
+                field.append(roles);
+                row.append(field, element("button", "भूमिका सहेजें / Save role"));
+                row.addEventListener("submit", event => {
+                    event.preventDefault();
+                    void changeMember(member.username, "role", roles.value);
+                });
+            }
+            row.append(action(member.pending ? "निमंत्रण रद्द करें / Revoke invite" : "सदस्य हटाएँ / Remove member",
+                "remove-member", () => {
+                    if (confirm("सदस्यता या निमंत्रण हटाएँ? / Remove this member or invitation?")) {
+                        void changeMember(member.username, "remove");
+                    }
+                }, member.username));
+            return row;
+        }));
+    } catch {
+        if (currentBoard === selected) status.textContent = "सदस्य सूची नहीं मिली। / Could not load the member list.";
+    }
+}
+
+async function changeMember(username, operation, role) {
+    const selected = currentBoard;
+    try {
+        await request(path() + "/members", "POST", { username, action: operation, role });
+        if (currentBoard !== selected) return;
+        if (username === session.user) await start(selected.id);
+        else void renderMembers();
+        status.textContent = "सदस्यता सहेजी गई। / Membership saved.";
+    } catch (error) {
+        if (currentBoard !== selected) return;
+        status.textContent = error.status === 409
+            ? "एक मालिक आवश्यक है। / A board must retain an owner."
+            : "सदस्यता नहीं बदली। / Could not change membership.";
+    }
+}
+
+projectSettings.addEventListener("toggle", () => {
+    if (projectSettings.open) void renderMembers();
+});
+
 function chooseMove(task, lane, column) {
     closeCard();
     selection = { id: task.id, revision: snapshot.revision, lanes: snapshot.lanes };
@@ -273,10 +427,13 @@ function updatePositions() {
 }
 
 async function saveMove(id, lane, column, position, revision) {
+    const selected = currentBoard;
     try {
         await request(path() + "/tasks/" + id, "PATCH", { lane, column, position, revision });
+        if (currentBoard !== selected) return;
         status.textContent = "स्थान सहेजा गया। / Move saved.";
     } catch (error) {
+        if (currentBoard !== selected) return;
         status.textContent = error.status === 409
             ? "कार्यपट बदल गया है। फिर से कोशिश करें। / Board changed. Try again."
             : "स्थान सहेजा नहीं गया। / Move failed.";
@@ -396,10 +553,13 @@ logout.addEventListener("click", async () => {
     }
 });
 
-async function start() {
+async function start(preferred) {
+    const previous = session;
     try {
-        session = await request("/session");
-        showSession();
+        const next = await request("/session");
+        if (session !== previous) return;
+        session = next;
+        showSession(preferred);
     } catch {
         status.textContent = "सर्वर उपलब्ध नहीं है। / Server unavailable.";
     }

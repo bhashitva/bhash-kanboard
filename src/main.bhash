@@ -73,6 +73,11 @@
                     स्थिर आमंत्रण: आमंत्रणचालक=नया आमंत्रणचालक(म,सदस्य,रक्षक);
                     मार्ग.जोड़ो("POST","/api/boards/:board/invitations",आमंत्रण);
                     मार्ग.जोड़ो("POST","/api/invitations/accept",आमंत्रण);
+                    स्थिर प्रबंधन: पटप्रबंधन=नया पटप्रबंधन(म,सदस्य,भंडार,घटनाएँ,पथ);
+                    मार्ग.जोड़ो("POST","/api/boards",प्रबंधन);
+                    मार्ग.जोड़ो("POST","/api/boards/:board/settings",प्रबंधन);
+                    मार्ग.जोड़ो("GET","/api/boards/:board/members",प्रबंधन);
+                    मार्ग.जोड़ो("POST","/api/boards/:board/members",प्रबंधन);
                     मार्ग.जोड़ो("GET","/api/boards/:board",पट);
                     मार्ग.जोड़ो("POST","/api/boards/:board/tasks",पट);
                     मार्ग.जोड़ो("PATCH","/api/boards/:board/tasks/:id",पट);

@@ -14,7 +14,7 @@
 आयात मानक.जेसन;
 आयात मानक.पाठ्य;
 
-अभिलेख पटप्रति(संस्करण: पूर्णांक, पंक्तियाँ: सूची<सर्ववस्तु>, अभिलेखित: सूची<सर्ववस्तु>);
+अभिलेख पटप्रति(संस्करण: पूर्णांक, पंक्तियाँ: सूची<सर्ववस्तु>, अभिलेखित: सूची<सर्ववस्तु>, नाम: पाठ);
 अभिलेख कार्डस्थान(पंक्ति: पूर्णांक, स्तंभ: पूर्णांक, क्रम: पूर्णांक);
 
 फलन कार्डसूची(पंक्तियाँ: सूची<सर्ववस्तु>, जगह: कार्डस्थान) -> सूची<सर्ववस्तु> {
@@ -48,6 +48,11 @@
                     "CREATE TABLE accounts (username TEXT PRIMARY KEY NOT NULL, password_hash TEXT NOT NULL)",
                     "CREATE TABLE board_access (board TEXT NOT NULL REFERENCES boards(id), username TEXT NOT NULL REFERENCES accounts(username), role TEXT NOT NULL CHECK(role IN ('owner','editor','viewer')), invite_hash TEXT, expires INTEGER, PRIMARY KEY(board,username), CHECK((invite_hash IS NULL)=(expires IS NULL)))",
                     "CREATE INDEX board_access_user ON board_access(username,board)"
+                }),
+                नया माइग्रेशन(४,"कार्यपट प्रबंधन",नया सूची<पाठ>{
+                    "ALTER TABLE boards ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE boards ADD COLUMN creator TEXT REFERENCES accounts(username)",
+                    "UPDATE boards SET name=CASE id WHEN 'team' THEN 'साझा कार्यपट / Team' WHEN 'studio' THEN 'अलग कार्यपट / Studio' ELSE id END"
                 })
             });
             योजना.लागूकरो(डाटा);
@@ -63,16 +68,16 @@
 
     सार्वजनिक असमकालिक फलन प्रतिलो(पट: पाठ, चिह्न: निरस्तीकरणचिह्न) -> पटप्रति {
         असमकालिक संसाधन (डाटा: असमडेटासंबंध=प्रतीक्षा असमडेटा.एसक्यूलाइट(पथ,चिह्न)) {
-            असमकालिक संसाधन (क: असमडेटाकथन=प्रतीक्षा डाटा.तैयार("SELECT revision, lanes, archived FROM boards WHERE id=?",चिह्न)) {
+            असमकालिक संसाधन (क: असमडेटाकथन=प्रतीक्षा डाटा.तैयार("SELECT revision, lanes, archived, name FROM boards WHERE id=?",चिह्न)) {
                 क.पाठरखो(१,पट);
                 यदि (!(प्रतीक्षा क.अगला(चिह्न))) { फेंको नया वेबत्रुटि(४०४,"कार्यपट नहीं मिला।"); }
                 लौटाओ नया पटप्रति(क.पूर्णांकलो(०),आयातसूची(जेसन.पढ़ो(क.पाठलो(१)),१६),
-                    आयातसूची(जेसन.पढ़ो(क.पाठलो(२)),२५०));
+                    आयातसूची(जेसन.पढ़ो(क.पाठलो(२)),२५०),क.पाठलो(३));
             }
         }
     }
 
-    सार्वजनिक असमकालिक फलन सहेजो(पट: पाठ, प्रति: पटप्रति,
+    सार्वजनिक असमकालिक फलन सहेजो(पट: पाठ, प्रति: पटप्रति, नाम: पाठ, केवलमालिक: तार्किक,
         म: सत्रप्रबंधक, अ: वेबअनुरोध, घटनाएँ: पटघटनाएँ, चिह्न: निरस्तीकरणचिह्न) -> पूर्णांक {
         स्थिर संस्करण: पूर्णांक=प्रति.संस्करण;
         स्थिर पंक्तियाँ: पाठ=जेसन.पाठबनाओ(प्रति.पंक्तियाँ);
@@ -81,9 +86,11 @@
             फेंको नया वेबत्रुटि(४२२,"कार्यपट की पाठ सीमा पार हो गई है।");
         }
         असमकालिक संसाधन (डाटा: असमडेटासंबंध=प्रतीक्षा असमडेटा.एसक्यूलाइट(पथ,चिह्न)) {
-            असमकालिक संसाधन (क: असमडेटाकथन=प्रतीक्षा डाटा.तैयार("UPDATE boards SET lanes=?, archived=?, revision=revision+1 WHERE id=? AND revision=? AND EXISTS (SELECT 1 FROM board_access WHERE board=boards.id AND username=? AND invite_hash IS NULL AND role IN ('owner','editor'))",चिह्न)) {
-                क.पाठरखो(१,पंक्तियाँ); क.पाठरखो(२,संग्रह); क.पाठरखो(३,पट); क.पूर्णांकरखो(४,संस्करण);
-                क.पाठरखो(५,म.अधिकृत(अ,"member").उपयोगकर्ता());
+            असमकालिक संसाधन (क: असमडेटाकथन=प्रतीक्षा डाटा.तैयार("UPDATE boards SET lanes=?, archived=?, name=?, revision=revision+1 WHERE id=? AND revision=? AND EXISTS (SELECT 1 FROM board_access WHERE board=boards.id AND username=? AND invite_hash IS NULL AND role IN ('owner','editor') AND (?=0 OR role='owner'))",चिह्न)) {
+                क.पाठरखो(१,पंक्तियाँ); क.पाठरखो(२,संग्रह); क.पाठरखो(३,नाम);
+                क.पाठरखो(४,पट); क.पूर्णांकरखो(५,संस्करण);
+                क.पाठरखो(६,म.अधिकृत(अ,"member").उपयोगकर्ता());
+                क.तार्किकरखो(७,केवलमालिक);
                 // SQLite autocommits this compare-and-swap before returning the row count.
                 यदि ((प्रतीक्षा क.चलाओ(चिह्न))!=१) { फेंको नया वेबत्रुटि(४०९,"कार्यपट का संस्करण बदल गया है।"); }
                 घटनाएँ.सूचितकरो(पट,संस्करण+१);
