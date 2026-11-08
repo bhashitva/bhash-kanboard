@@ -97,37 +97,126 @@ def layout(snapshot):
                          for column in lane["columns"]]) for lane in snapshot["lanes"]]
 
 
+def browser_members(browser, base, revision):
+    from playwright.sync_api import expect
+
+    frames = [[], []]
+    pages = []
+    for index, user in enumerate(("alice", "bob")):
+        page = browser.new_context().new_page()
+        page.on("websocket", lambda socket, inbox=frames[index]:
+                socket.on("framereceived", lambda payload: inbox.append(json.loads(payload))))
+        page.goto(base)
+        expect(page.locator("#team-guide")).to_be_hidden()
+        page.locator("input[name=username]").fill(user)
+        page.locator("input[name=password]").fill(PASSWORDS[user])
+        page.locator("#login button").click()
+        expect(page.locator("#board")).to_have_attribute("data-revision", str(revision))
+        expect(page.get_by_role("heading", name="एक कार्ड का स्थान बदलें / Move a card")).to_be_visible()
+        expect(page.locator("#studio-guide")).to_be_hidden()
+        pages.append(page)
+    return pages, frames
+
+
+def seen_revision(pages, frames, revision):
+    from playwright.sync_api import expect
+
+    for index, page in enumerate(pages):
+        expect(page.locator("#board")).to_have_attribute("data-revision", str(revision), timeout=6000)
+        assert {"v": 1, "type": "changed", "board": "team", "revision": revision} in frames[index], frames[index]
+
+
 def browser_move(base):
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as driver:
         browser = driver.chromium.launch()
-        frames = [[], []]
-        pages = []
-        for index, user in enumerate(("alice", "bob")):
-            page = browser.new_context().new_page()
-            page.on("websocket", lambda socket, inbox=frames[index]:
-                    socket.on("framereceived", lambda payload: inbox.append(json.loads(payload))))
-            page.goto(base)
-            expect(page.locator("#team-guide")).to_be_hidden()
-            page.locator("input[name=username]").fill(user)
-            page.locator("input[name=password]").fill(PASSWORDS[user])
-            page.locator("#login button").click()
-            expect(page.locator("#board")).to_have_attribute("data-revision", "1")
-            expect(page.get_by_role("heading", name="एक कार्ड का स्थान बदलें / Move a card")).to_be_visible()
-            expect(page.locator("#studio-guide")).to_be_hidden()
+        pages, frames = browser_members(browser, base, 1)
+        for page in pages:
             expect(page.locator('[data-task="101"]')).to_contain_text("पहला कार्ड 🧪")
             expect(page.locator('[data-task="101"] img')).to_have_count(0)
-            pages.append(page)
-        alice, bob = pages
-        alice.locator('[data-task="101"] button').click()
+        alice, _ = pages
+        alice.locator('[data-task="101"] [data-action=move]').click()
         alice.locator("select[name=destination]").select_option("2/12")
         alice.locator('#move button[type="submit"]').click()
-        for index, page in enumerate((alice, bob)):
-            expect(page.locator('[data-lane="2"] [data-column="12"] [data-task="101"]')).to_be_visible(timeout=5000)
-            expect(page.locator("#board")).to_have_attribute("data-revision", "2")
-            assert {"v": 1, "type": "changed", "board": "team", "revision": 2} in frames[index], frames[index]
+        seen_revision(pages, frames, 2)
+        for page in pages:
+            expect(page.locator('[data-lane="2"] [data-column="12"] [data-task="101"]')).to_be_visible()
         browser.close()
+
+
+def browser_cards(base, revision):
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        pages, frames = browser_members(browser, base, revision)
+        alice, bob = pages
+        destination = '[data-lane="2"] [data-column="12"]'
+        title = "नया काम 🧪"
+        alice.locator(destination + " [data-action=create]").click()
+        alice.locator("#card-form input[name=title]").fill(title)
+        alice.locator("#card-form textarea").fill("कार्ड का विवरण")
+        alice.locator('#card-form button[type="submit"]').click()
+        seen_revision(pages, frames, revision + 1)
+        identity = int(bob.locator(destination + " .card").filter(has_text=title).get_attribute("data-task"))
+        card = f'[data-task="{identity}"]'
+        archived = f'[data-archived-task="{identity}"]'
+        original_order = bob.locator(destination + " [data-task]").evaluate_all("(cards) => cards.map(c => c.dataset.task)")
+
+        # Hold Alice's draft across Bob's commit and its resulting live re-render.
+        for page in pages:
+            page.locator(card + " [data-action=edit]").click()
+        alice.locator("#card-form input[name=title]").fill("Alice's unsaved draft")
+        bob.locator("#card-form input[name=title]").fill("नया शीर्षक")
+        bob.locator("#card-form textarea").fill("<img src=x onerror=alert(1)>")
+        bob.locator('#card-form button[type="submit"]').click()
+        seen_revision(pages, frames, revision + 2)
+        alice.locator('#card-form button[type="submit"]').click()
+        expect(alice.locator("#card-conflict")).to_be_visible()
+        expect(alice.locator("#card-form input[name=title]")).to_have_value("Alice's unsaved draft")
+        alice.locator("#cancel-card").click()
+        for page in pages:
+            expect(page.locator(card)).to_contain_text("नया शीर्षक")
+            expect(page.locator(card)).to_contain_text("<img src=x onerror=alert(1)>")
+            expect(page.locator(card + " img")).to_have_count(0)
+
+        alice.locator(card + " [data-action=archive]").click()
+        seen_revision(pages, frames, revision + 3)
+        for page in pages:
+            expect(page.locator(card)).to_have_count(0)
+            page.locator("#archive-summary").click()
+            expect(page.locator(archived)).to_contain_text("नया शीर्षक")
+        bob.locator(archived + " [data-action=restore]").click()
+        seen_revision(pages, frames, revision + 4)
+        for page in pages:
+            expect(page.locator(archived)).to_have_count(0)
+            expect(page.locator(destination + " " + card)).to_contain_text("नया शीर्षक")
+            assert page.locator(destination + " [data-task]").evaluate_all(
+                "(cards) => cards.map(c => c.dataset.task)") == original_order
+
+        alice.locator(card + " [data-action=archive]").click()
+        seen_revision(pages, frames, revision + 5)
+        browser.close()
+        return identity
+
+
+def api_cards(alice, bob, revision):
+    payload = {"title": "नया काम", "description": "", "lane": 2, "column": 12, "revision": revision}
+    assert alice.call(TEAM + "/tasks", "POST", dict(payload, title=" "))[0] == 422
+    assert alice.call(TEAM + "/tasks", "POST", dict(payload, description="a" * 4097))[0] == 422
+    status, created = alice.call(TEAM + "/tasks", "POST", payload)
+    assert status == 201 and created["revision"] == revision + 1
+    task = TEAM + "/tasks/" + str(created["id"])
+    edit = {"title": "नया शीर्षक", "description": "नया विवरण", "revision": revision + 1}
+    assert bob.call(task + "/details", "PATCH", edit)[0] == 200
+    assert alice.call(task + "/details", "PATCH", edit)[0] == 409
+    assert alice.call(task + "/archive", "POST", {"revision": revision + 2})[0] == 200
+    assert alice.call(task + "/archive", "POST", {"revision": revision + 3})[0] == 404
+    assert bob.call(task + "/restore", "POST", {"revision": revision + 3})[0] == 200
+    assert bob.call(task + "/restore", "POST", {"revision": revision + 4})[0] == 404
+    assert alice.call(task + "/archive", "POST", {"revision": revision + 4})[0] == 200
+    return created["id"]
 
 
 def rejected_import(command, database, source, message):
@@ -156,7 +245,15 @@ def check_import(command, tmp):
     rejected_import(command, database, FIXTURE, "आयातित")
     with closing(sqlite3.connect(database)) as db:
         assert db.execute("SELECT revision, lanes FROM boards WHERE id='team'").fetchone() == (1, lanes)
-    print("PASS import order, invalid import rollback and duplicate import rejection", flush=True)
+    # Simulate a previously deployed database with exactly its v1 schema and history.
+    with closing(sqlite3.connect(database)) as db, db:
+        db.execute("ALTER TABLE boards DROP COLUMN archived")
+        db.execute("DELETE FROM bhash_schema_history WHERE version=2")
+    with server(command, database):
+        with closing(sqlite3.connect(database)) as db:
+            assert db.execute("SELECT revision, lanes, archived FROM boards WHERE id='team'").fetchone() == (1, lanes, "[]")
+            assert db.execute("SELECT version FROM bhash_schema_history ORDER BY version").fetchall() == [(1,), (2,)]
+    print("PASS import order, rejected imports and v1 database upgrade", flush=True)
 
 
 def exercise(command, tmp, browser):
@@ -209,10 +306,35 @@ def exercise(command, tmp, browser):
         saved = alice.call(TEAM)[1]
         assert layout(saved)[1][1][1][1] == list(reversed(ids[1][1][1][1]))
 
+        revision = saved["revision"]
+        task_id = browser_cards(base, revision) if browser else api_cards(alice, bob, revision)
+        task = TEAM + "/tasks/" + str(task_id)
+        saved = alice.call(TEAM)[1]
+        assert saved["revision"] == revision + 5
+        assert saved["archived"][0]["card"]["id"] == task_id
+        valid = {"revision": saved["revision"], "lane": 2, "column": 12, "description": "", "title": " "}
+        assert alice.call(TEAM + "/tasks", "POST", valid)[0] == 422
+        assert alice.call(TEAM + "/tasks", "POST", dict(valid, title="Valid", description="a" * 4097))[0] == 422
+        assert alice.call(task + "/archive", "POST", {"revision": saved["revision"]})[0] == 404
+        denied = {"revision": saved["revision"]}
+        for suffix, method in (("/details", "PATCH"), ("/archive", "POST"), ("/restore", "POST")):
+            assert charlie.call(task + suffix, method, denied)[0] == 403
+        assert charlie.call(TEAM + "/tasks", "POST", denied)[0] == 403
+        assert charlie.call("/api/boards/studio")[1]["archived"] == []
+        assert alice.call(task + "/restore", "POST", denied, csrf=False)[0] == 403
+        assert alice.call(TEAM) == (200, saved)
+
     with server(command, database) as base:
-        assert Account(base, "alice").call(TEAM) == (200, saved)
+        alice = Account(base, "alice")
+        assert alice.call(TEAM) == (200, saved)
         assert Account(base, "bob").call(TEAM) == (200, saved)
-    print("PASS import, two live sessions, CSRF, isolation, conflicts, same-column reorder and restart", flush=True)
+        assert alice.call(task + "/restore", "POST", {"revision": saved["revision"]})[0] == 200
+        restored = alice.call(TEAM)[1]
+        assert restored["archived"] == []
+        assert restored["lanes"][1]["columns"][1]["tasks"][-1]["id"] == task_id
+    with server(command, database) as base:
+        assert Account(base, "alice").call(TEAM) == (200, restored)
+    print("PASS card lifecycle, two live sessions, CSRF, isolation, conflicts and restart", flush=True)
 
 
 def main():
