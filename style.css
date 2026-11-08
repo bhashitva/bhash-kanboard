@@ -7,9 +7,9 @@ h1 span { font-size: .65em; font-weight: normal; }
 form { display: flex; gap: .8rem; align-items: end; flex-wrap: wrap; padding: 1rem; background: white; border-radius: .6rem; }
 form h2 { flex-basis: 100%; }
 label { display: grid; gap: .2rem; }
-input, select, button { font: inherit; padding: .45rem .65rem; border: 1px solid #7594a5; border-radius: .35rem; }
+input, select, textarea, button { font: inherit; padding: .45rem .65rem; border: 1px solid #7594a5; border-radius: .35rem; }
 button { cursor: pointer; color: white; background: #17607b; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #bd5700; outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #bd5700; outline-offset: 2px; }
 [hidden] { display: none !important; }
 #status { min-height: 1.5em; margin: .6rem 0; }
 .guide { padding: .85rem 1rem; margin-bottom: 1rem; background: white; border-inline-start: .25rem solid #17607b; border-radius: .35rem; }
@@ -22,3 +22,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .card { background: white; border-radius: .35rem; padding: .6rem; margin: .45rem 0; overflow-wrap: anywhere; }
 .card p { white-space: pre-wrap; }
 .card[draggable] { cursor: grab; }
+
+.card-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+#card-form, #archive { margin: 1rem 0; }
+#card-form label { min-width: min(100%, 15rem); flex: 1; }
+#card-conflict { flex-basis: 100%; color: #8e2600; }
+#archive { background: #deebf0; border-radius: .55rem; padding: .65rem; }
+#archive-summary { cursor: pointer; font-weight: bold; }

@@ -22,6 +22,7 @@
   <section id="team-guide" class="guide" aria-labelledby="team-guide-title" hidden>
     <h2 id="team-guide-title">एक कार्ड का स्थान बदलें / Move a card</h2>
     <ol>
+      <li>नया काम जोड़ने के लिए <strong>कार्ड जोड़ें / Add card</strong> दबाएँ। <span lang="en">Use Edit to update a card or Archive to put it away. Open the archive to restore it.</span></li>
       <li>किसी कार्ड पर <strong>स्थान बदलें / Move</strong> दबाएँ। <span lang="en">Choose Move on any card.</span></li>
       <li>गंतव्य और स्थान चुनें, फिर <strong>सहेजें / Save move</strong> दबाएँ। <span lang="en">Choose a destination and position, then save. Position 1 puts the card at the top.</span></li>
       <li>बदलाव देखने के लिए दूसरे खाते से निजी विंडो में प्रवेश करें। <span lang="en">Sign in as the other demo user (alice or bob) in a private window to see moves appear live.</span></li>
@@ -33,6 +34,21 @@
       <span lang="en">Charlie has an empty board. Sign in as alice or bob to try moving cards on the shared board.</span></p>
   </section>
   <section id="board" aria-label="कार्यपट / Board" hidden></section>
+  <form id="card-form" hidden>
+    <h2 id="card-form-title"></h2>
+    <label>शीर्षक / Title <input name="title" maxlength="400" required></label>
+    <label>विवरण / Description <textarea name="description" maxlength="4096" rows="3"></textarea></label>
+    <p id="card-conflict" role="alert" hidden>
+      आपका मसौदा अभी यहाँ है। नया संस्करण देखने के लिए अपने बदलाव कॉपी करें और फिर से कार्ड खोलें।
+      <span lang="en">Your draft is still here. Copy your changes, then cancel and reopen to review the latest version.</span>
+    </p>
+    <button type="submit">कार्ड सहेजें / Save card</button>
+    <button type="button" id="cancel-card">रद्द करें / Cancel</button>
+  </form>
+  <details id="archive" hidden>
+    <summary id="archive-summary">संग्रह / Archive</summary>
+    <div id="archive-list"></div>
+  </details>
   <form id="move" hidden>
     <h2 id="move-title"></h2>
     <label>गंतव्य / Destination <select name="destination" required></select></label>
