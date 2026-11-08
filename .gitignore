@@ -1,0 +1,5 @@
+out/
+tmp/
+*.db
+*.db-*
+__pycache__/

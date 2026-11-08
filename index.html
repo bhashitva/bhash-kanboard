@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>कार्यपट · Bhash Kanboard</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+<header>
+  <h1>कार्यपट <span>Bhash Kanboard</span></h1>
+  <button id="logout" hidden>बाहर जाएँ / Sign out</button>
+</header>
+<main>
+  <form id="login">
+    <label>उपयोगकर्ता / Username <input name="username" autocomplete="username" required></label>
+    <label>कूटशब्द / Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <button>प्रवेश करें / Sign in</button>
+  </form>
+  <p id="status" role="status"></p>
+  <section id="board" aria-label="कार्यपट / Board" hidden></section>
+  <form id="move" hidden>
+    <h2 id="move-title"></h2>
+    <label>गंतव्य / Destination <select name="destination" required></select></label>
+    <label>स्थान / Position <input name="position" type="number" min="1" step="1" required></label>
+    <button type="submit">सहेजें / Save move</button>
+    <button type="button" id="cancel-move">रद्द करें / Cancel</button>
+  </form>
+</main>
+</body>
+</html>

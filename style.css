@@ -1,0 +1,20 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 1rem/1.5 system-ui, sans-serif; color: #183043; background: #f1f6f8; }
+header, main { padding: 1rem clamp(1rem, 4vw, 3rem); }
+header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: #16384a; color: white; }
+h1, h2, h3, p { margin: 0 0 .5rem; }
+h1 span { font-size: .65em; font-weight: normal; }
+form { display: flex; gap: .8rem; align-items: end; flex-wrap: wrap; padding: 1rem; background: white; border-radius: .6rem; }
+form h2 { flex-basis: 100%; }
+label { display: grid; gap: .2rem; }
+input, select, button { font: inherit; padding: .45rem .65rem; border: 1px solid #7594a5; border-radius: .35rem; }
+button { cursor: pointer; color: white; background: #17607b; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #bd5700; outline-offset: 2px; }
+[hidden] { display: none !important; }
+#status { min-height: 1.5em; margin: .6rem 0; }
+.lane { margin-bottom: 1rem; }
+.columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .65rem; }
+.column { background: #deebf0; border-radius: .55rem; padding: .65rem; min-height: 6rem; }
+.card { background: white; border-radius: .35rem; padding: .6rem; margin: .45rem 0; overflow-wrap: anywhere; }
+.card p { white-space: pre-wrap; }
+.card[draggable] { cursor: grab; }
