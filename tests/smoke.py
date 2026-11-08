@@ -456,7 +456,7 @@ def browser_invitation(base):
         owner.locator("#issue-invite button").click()
         expect(owner.locator("#invite-code")).to_be_visible()
         code = owner.locator("#invite-code").input_value()
-        guest.locator("#membership details").first.locator("summary").click()
+        guest.locator("#accept-invite-panel summary").click()
         guest.locator("#accept-invite input[name=code]").fill(code)
         guest.locator("#accept-invite button").click()
         expect(guest.locator("#board")).to_have_attribute("data-revision", "2")
