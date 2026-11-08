@@ -43,6 +43,11 @@
                 }),
                 नया माइग्रेशन(२,"संग्रहीत कार्ड",नया सूची<पाठ>{
                     "ALTER TABLE boards ADD COLUMN archived TEXT NOT NULL DEFAULT '[]'"
+                }),
+                नया माइग्रेशन(३,"खाते और सदस्य",नया सूची<पाठ>{
+                    "CREATE TABLE accounts (username TEXT PRIMARY KEY NOT NULL, password_hash TEXT NOT NULL)",
+                    "CREATE TABLE board_access (board TEXT NOT NULL REFERENCES boards(id), username TEXT NOT NULL REFERENCES accounts(username), role TEXT NOT NULL CHECK(role IN ('owner','editor','viewer')), invite_hash TEXT, expires INTEGER, PRIMARY KEY(board,username), CHECK((invite_hash IS NULL)=(expires IS NULL)))",
+                    "CREATE INDEX board_access_user ON board_access(username,board)"
                 })
             });
             योजना.लागूकरो(डाटा);
@@ -76,9 +81,9 @@
             फेंको नया वेबत्रुटि(४२२,"कार्यपट की पाठ सीमा पार हो गई है।");
         }
         असमकालिक संसाधन (डाटा: असमडेटासंबंध=प्रतीक्षा असमडेटा.एसक्यूलाइट(पथ,चिह्न)) {
-            असमकालिक संसाधन (क: असमडेटाकथन=प्रतीक्षा डाटा.तैयार("UPDATE boards SET lanes=?, archived=?, revision=revision+1 WHERE id=? AND revision=?",चिह्न)) {
+            असमकालिक संसाधन (क: असमडेटाकथन=प्रतीक्षा डाटा.तैयार("UPDATE boards SET lanes=?, archived=?, revision=revision+1 WHERE id=? AND revision=? AND EXISTS (SELECT 1 FROM board_access WHERE board=boards.id AND username=? AND invite_hash IS NULL AND role IN ('owner','editor'))",चिह्न)) {
                 क.पाठरखो(१,पंक्तियाँ); क.पाठरखो(२,संग्रह); क.पाठरखो(३,पट); क.पूर्णांकरखो(४,संस्करण);
-                यदि (पटमान(म.अधिकृत(अ,"member").उपयोगकर्ता())!=पट) { फेंको नया वेबत्रुटि(४०३,"यह कार्यपट उपलब्ध नहीं है।"); }
+                क.पाठरखो(५,म.अधिकृत(अ,"member").उपयोगकर्ता());
                 // SQLite autocommits this compare-and-swap before returning the row count.
                 यदि ((प्रतीक्षा क.चलाओ(चिह्न))!=१) { फेंको नया वेबत्रुटि(४०९,"कार्यपट का संस्करण बदल गया है।"); }
                 घटनाएँ.सूचितकरो(पट,संस्करण+१);

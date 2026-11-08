@@ -29,3 +29,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 #card-conflict { flex-basis: 100%; color: #8e2600; }
 #archive { background: #deebf0; border-radius: .55rem; padding: .65rem; }
 #archive-summary { cursor: pointer; font-weight: bold; }
+
+#register, #membership { margin-top: 1rem; }
+#membership { padding: .65rem; margin-bottom: 1rem; background: white; border-radius: .35rem; }
+#membership summary { cursor: pointer; padding: .35rem 0; }
+#invite-code { width: min(100%, 46rem); }
