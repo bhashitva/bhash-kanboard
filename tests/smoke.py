@@ -259,6 +259,8 @@ def check_import(command, tmp):
         assert db.execute("SELECT revision, lanes FROM boards WHERE id='team'").fetchone() == (1, lanes)
     # Simulate a previously deployed database with exactly its v1 schema and history.
     with closing(sqlite3.connect(database)) as db, db:
+        db.execute("ALTER TABLE boards DROP COLUMN creator")
+        db.execute("ALTER TABLE boards DROP COLUMN name")
         db.execute("ALTER TABLE boards DROP COLUMN archived")
         db.execute("DROP TABLE board_access")
         db.execute("DROP TABLE accounts")
@@ -266,7 +268,7 @@ def check_import(command, tmp):
     with server(command, database):
         with closing(sqlite3.connect(database)) as db:
             assert db.execute("SELECT revision, lanes, archived FROM boards WHERE id='team'").fetchone() == (1, lanes, "[]")
-            assert db.execute("SELECT version FROM bhash_schema_history ORDER BY version").fetchall() == [(1,), (2,), (3,)]
+            assert db.execute("SELECT version FROM bhash_schema_history ORDER BY version").fetchall() == [(1,), (2,), (3,), (4,)]
     print("PASS import order, rejected imports and v1 database upgrade", flush=True)
 
 
@@ -364,8 +366,8 @@ def check_membership(command, tmp, browser):
     accept = "/api/invitations/accept"
     with server(command, database, FIXTURE) as base:
         alice, bob, charlie = (Account(base, user) for user in ("alice", "bob", "charlie"))
-        assert alice.call("/session")[1]["boards"] == [{"id": "team", "role": "owner"}]
-        assert bob.call("/session")[1]["boards"] == [{"id": "team", "role": "editor"}]
+        assert roles(alice.call("/session")[1]) == {"team": "owner"}
+        assert roles(bob.call("/session")[1]) == {"team": "editor"}
         viewer, editor = Account(base), Account(base)
         assert viewer.call("/register", "POST", {"username": "new-viewer", "password": "test-new-account-password"}, csrf=False)[0] == 403
         assert viewer.call("/register", "POST", {"username": "invalid user", "password": "test-new-account-password"})[0] == 422
@@ -417,7 +419,7 @@ def check_membership(command, tmp, browser):
     with server(command, database) as base:
         viewer = Account(base)
         profile = viewer.login_registered("new-viewer")
-        assert profile["boards"] == [{"id": "studio", "role": "editor"}, {"id": "team", "role": "viewer"}]
+        assert roles(profile) == {"studio": "editor", "team": "viewer"}
         assert viewer.call(TEAM)[1]["revision"] == 2
         assert viewer.call(TEAM + "/tasks/101/archive", "POST", {"revision": 2})[0] == 403
         assert viewer.call("/api/boards/studio")[0] == 200
@@ -464,6 +466,123 @@ def browser_invitation(base):
         browser.close()
 
 
+def roles(profile):
+    return {project["id"]: project["role"] for project in profile["boards"]}
+
+
+def check_admin(command, tmp, browser):
+    database = tmp / "admin.db"
+    with server(command, database, FIXTURE) as base:
+        owner, guest, pending = (Account(base) for _ in range(3))
+        owner.register("project-owner")
+        guest.register("project-editor")
+        pending.register("project-viewer")
+        status, created = owner.call("/api/boards", "POST", {"name": "नया कार्यपट"})
+        assert status == 201, (status, created)
+        board_id = created["id"]
+        board = "/api/boards/" + board_id
+        settings, members = board + "/settings", board + "/members"
+        assert roles(owner.call("/session")[1]) == {board_id: "owner"}
+        assert guest.call(board)[0] == 403 and owner.call(TEAM)[0] == 403
+        initial = owner.call(board)[1]
+        assert initial["name"] == "नया कार्यपट" and len(initial["lanes"][0]["columns"]) == 3
+
+        def layout_change(kind, action, **fields):
+            revision = owner.call(board)[1]["revision"]
+            return owner.call(settings, "POST", {"kind": kind, "action": action, "revision": revision, **fields})[0]
+
+        assert layout_change("board", "rename", name="परियोजना") == 200
+        assert owner.call(settings, "POST", {"kind": "lane", "action": "add", "name": "stale", "revision": 1})[0] == 409
+        assert layout_change("lane", "add", name="दूसरी पंक्ति") == 200
+        assert layout_change("lane", "move", id=2, position=1) == 200
+        assert layout_change("lane", "rename", id=2, name="प्राथमिकता") == 200
+        assert layout_change("column", "add", lane=2, name="जाँच") == 200
+        assert layout_change("column", "rename", lane=2, id=2, name="समीक्षा") == 200
+        assert layout_change("column", "move", lane=2, id=2, position=1) == 200
+        snapshot = owner.call(board)[1]
+        assert snapshot["name"] == "परियोजना" and snapshot["lanes"][0]["name"] == "प्राथमिकता"
+        assert snapshot["lanes"][0]["columns"][0]["title"] == "समीक्षा"
+        status, created = owner.call(board + "/tasks", "POST", {"lane": 2, "column": 2,
+            "title": "सुरक्षित कार्ड", "description": "", "revision": snapshot["revision"]})
+        assert status == 201
+        card = board + "/tasks/" + str(created["id"])
+        assert layout_change("column", "delete", lane=2, id=2) == 409
+        assert owner.call(card + "/archive", "POST", {"revision": created["revision"]})[0] == 200
+        assert layout_change("lane", "delete", id=2) == 409
+        assert layout_change("column", "delete", lane=2, id=2) == 409
+        assert owner.call(card + "/restore", "POST", {"revision": created["revision"] + 1})[0] == 200
+        assert owner.call(card, "PATCH", {"lane": 1, "column": 1, "position": 1, "revision": created["revision"] + 2})[0] == 200
+        assert layout_change("column", "delete", lane=2, id=2) == 200
+        assert layout_change("column", "delete", lane=2, id=1) == 409
+        assert layout_change("lane", "delete", id=2) == 200
+        assert layout_change("lane", "delete", id=1) == 409
+
+        invite = invitation(owner, board_id, "project-editor", "editor")
+        accept = "/api/invitations/accept"
+        assert guest.call(accept, "POST", invite)[0] == 204
+        revoked = invitation(owner, board_id, "project-viewer", "viewer")
+        status, listing = owner.call(members)
+        assert status == 200 and {"username": "project-viewer", "role": "viewer", "pending": True} in listing
+        assert revoked["token"] not in json.dumps(listing)
+        assert guest.call(members)[0] == 403
+        assert guest.call(settings, "POST", {"kind": "lane", "action": "add", "name": "denied", "revision": 1})[0] == 403
+
+        def member_change(by, username, action, **fields):
+            return by.call(members, "POST", {"username": username, "action": action, **fields})[0]
+
+        assert member_change(owner, "project-viewer", "remove") == 204
+        assert pending.call(accept, "POST", revoked)[0] == 403
+        assert member_change(owner, "project-owner", "role", role="viewer") == 409
+        assert member_change(owner, "project-owner", "remove") == 409
+        assert member_change(owner, "project-editor", "role", role="owner") == 204
+        with closing(owner.live(board_id)) as live:
+            assert json.loads(live.recv())["type"] == "ready"
+            assert member_change(guest, "project-owner", "role", role="viewer") == 204
+            opcode, frame = live.recv_data()
+            assert opcode == websocket.ABNF.OPCODE_CLOSE and frame[:2] == struct.pack("!H", 1008)
+        assert owner.call(board)[0] == 200 and owner.call(members)[0] == 403
+        with closing(owner.live(board_id)) as live:
+            assert json.loads(live.recv())["type"] == "ready"
+            assert member_change(guest, "project-owner", "remove") == 204
+            opcode, frame = live.recv_data()
+            assert opcode == websocket.ABNF.OPCODE_CLOSE and frame[:2] == struct.pack("!H", 1008)
+        assert owner.call(board)[0] == 403
+        assert owner.call("/session")[1]["boards"] == []
+        assert member_change(guest, "project-editor", "role", role="editor") == 409
+        saved = guest.call(board)[1]
+        if browser:
+            browser_admin(base)
+    with server(command, database) as base:
+        guest, owner = Account(base), Account(base)
+        assert roles(guest.login_registered("project-editor")) == {board_id: "owner"}
+        assert owner.login_registered("project-owner")["boards"] == []
+        assert guest.call(board) == (200, saved) and owner.call(board)[0] == 403
+    print("PASS board creation, versioned layouts, owner protection, role changes and live revocation", flush=True)
+
+
+def browser_admin(base):
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch()
+        page = browser.new_page()
+        page.goto(base)
+        page.locator("#register input[name=username]").fill("browser-owner")
+        page.locator("#register input[name=password]").fill("test-new-account-password")
+        page.locator("#register button").click()
+        page.locator("#create-project summary").click()
+        page.locator("#create-board input").fill("Browser board")
+        page.locator("#create-board button").click()
+        expect(page.locator("#board-title")).to_have_text("Browser board")
+        page.locator("#project-settings summary").click()
+        expect(page.locator("#member-settings")).to_contain_text("browser-owner")
+        lane = page.get_by_label("नई पंक्ति / New swimlane", exact=True)
+        lane.fill("Expedite")
+        lane.press("Enter")
+        expect(page.locator("#board").get_by_role("heading", name="Expedite")).to_be_visible()
+        browser.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--browser", action="store_true")
@@ -480,6 +599,7 @@ def main():
         if not args.import_only:
             exercise(command, Path(directory), args.browser)
             check_membership(command, Path(directory), args.browser)
+            check_admin(command, Path(directory), args.browser)
 
 
 if __name__ == "__main__":
